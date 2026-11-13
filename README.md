@@ -2,7 +2,7 @@
 
 Academic researcher for Psychology. This is a small, executable literature-search workflow for Codex, with durable instructions in [AGENTS.md](AGENTS.md).
 
-It runs PubMed searches through NCBI E-utilities, imports authorized PsycINFO and Web of Science RIS exports through separate adapters, and produces RIS/BibTeX citations plus an audit trail. No OpenAI API key, browser automation, subscription API entitlement, or extra Python packages are needed.
+It runs PubMed searches through NCBI E-utilities, offers an optional Web of Science Starter API connector, imports authorized PsycINFO and Web of Science RIS exports, and produces RIS/BibTeX citations plus an audit trail. No OpenAI API key, browser automation or extra Python packages are needed. PubMed works without an API key; the optional Web of Science connector requires its own authorized `WOS_API_KEY`.
 
 ## What was missing
 
@@ -55,9 +55,28 @@ python3 -m researcher verify runs/PASTE-THE-PRINTED-RUN-DIRECTORY-NAME
 
 Snapshots let you inspect what happened even if database content later changes. Live reruns may produce different results. Checksums detect accidental changes; they are not signed proof against deliberate tampering. Run directories are never reused automatically, but remain ordinary editable files.
 
-## PsycINFO and Web of Science
+## Web of Science Starter API
+
+See [Web of Science account and cloud setup](docs/webofscience-setup.md) to obtain an API subscription and configure the `WOS_API_KEY` secret. A personal Web of Science website login is separate from API access. Starter is supported; Expanded API is not.
+
+```sh
+python3 -m researcher doctor --database webofscience --online
+python3 -m researcher webofscience --query-file queries/webofscience-api-demo.txt --max-records 5 --allow-partial
+```
+
+Both commands save the usual audit artifacts and citation exports. The first is a one-record connectivity probe; the second is a capped demonstration. Credentials must be configured securely in the environment and are not command-line options. The connector sends HTTPS GET requests only to `api.clarivate.com`, with redirects disabled.
+
+For real searches, save the exact API-supported query in its own file. The adapter searches Core Collection (`WOS`); optionally set `--edition 'WOS+SSCI'` or an appropriate comma-separated list of subscribed editions. Omitted editions use the account's entitlement, whose precise coverage is not inferred by the program. Dates and other restrictions belong in the exact query, such as `PY=2024` or a documented `DOP` range. All requests use the explicit sort `LD+A`.
+
+The default record cap is 50 and request budget is 10 per run. `--max-requests` counts every attempt including retries, and is not a daily quota tracker. Page size stays fixed throughout a run; the final raw page may contain records beyond the output cap. The manifest distinguishes `downloaded_count` from `returned_count` (selected output records). The program stops on missing pages, duplicate identifiers, changing totals or exhausted request budgets rather than claiming complete retrieval. A successful count refers to the results accessible to the API account. Database changes between pages can still affect a live search; retained raw pages document the responses actually received.
+
+Starter returns citation metadata rather than abstracts or full text. Topic searches can match abstracts even though abstracts are not returned. Validate the query and available fields for the review question. [Official API schema](https://developer.clarivate.com/apis/wos-starter/swagger)
+
+## PsycINFO and Web of Science RIS imports
 
 Use your institution's authorized platform to execute the search and export RIS. These import adapters do not log into databases or execute online searches. APA documents RIS exports from PsycNet; Clarivate documents RIS among Web of Science export formats. [APA export help](https://askpubs.apa.org/s/article/I-need-help-exporting-references-from-APA-PsycNet), [Clarivate export help](https://webofscience.zendesk.com/hc/en-us/articles/20135124532113-Search-Results)
+
+Confirm that your intended processing and any AI use of the exported content are allowed under the relevant terms; export permission alone does not establish that. For Radboud PsycINFO, use its Ovid platform and matching syntax, not the generic EBSCOhost template.
 
 1. Save the **actual submitted search string/history** into a query file. The included PsycINFO template is specifically for EBSCOhost; Ovid, PsycNet and ProQuest require their own syntax. The Web of Science template is separate. Review all templates in the platform before use.
 2. Copy the appropriate metadata template from `examples/` into `private/`. Enter platform, the actual search timestamp with timezone, filters, displayed total, exported result range, collection/indexes and timespan. For example, a known timestamp has the form `2026-11-13T15:30:00+01:00`. Leave unknown fields `null`; do not guess.

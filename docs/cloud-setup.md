@@ -38,9 +38,11 @@ Verify runtime HTTPS POST access to eutils.ncbi.nlm.nih.gov, then run:
 python3 -m researcher doctor --online
 Report the run directory, manifest status, returned PMID, and test results.
 Do not substitute Consensus or general web search for a PubMed search.
-Use authorized RIS exports for PsycINFO/Web of Science unless a separate,
-authorized API adapter is implemented and tested. Do not assume browser or
-subscription access. If a step fails, show the exact error and missing setting.
+Use the optional Web of Science Starter API adapter only when WOS_API_KEY
+and suitable API permission are configured; see docs/webofscience-setup.md.
+Otherwise use authorized RIS exports for Web of Science and PsycINFO. Do not
+assume browser or subscription access. If a step fails, show the exact error
+and missing setting.
 Save the tested configuration and report whether publication is still needed.
 ```
 
