@@ -1,0 +1,11 @@
+{
+  "database": "webofscience",
+  "platform": "Web of Science",
+  "searched_at": null,
+  "filters": null,
+  "total_results": null,
+  "exported_range": null,
+  "collection": null,
+  "timespan": null,
+  "notes": "Template only. Record the actual collection, indexes, timespan, filters and exported result positions."
+}

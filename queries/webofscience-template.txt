@@ -1,0 +1,1 @@
+TS=("cognitive behavioral therapy" AND insomnia)

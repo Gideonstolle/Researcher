@@ -1,0 +1,11 @@
+{
+  "database": "psycinfo",
+  "platform": "EBSCOhost",
+  "searched_at": null,
+  "filters": null,
+  "total_results": null,
+  "exported_range": null,
+  "collection": "APA PsycInfo",
+  "timespan": null,
+  "notes": "Template only. Copy the actual search history and replace all unknowns you can substantiate."
+}
