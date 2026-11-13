@@ -13,9 +13,10 @@ The confirmed repository gap is addressed by AGENTS.md, executable adapters and 
 ## Validation recorded on 13 November 2026
 
 - Python 3.14.5: all 41 offline tests passed, including exact query logging, mocked PubMed requests, response/identifier checks, both RIS import adapters, citation outputs and checksum verification.
-- A live one-record PubMed probe was attempted from the local Mac. It failed after bounded retries with `URLError: [Errno 61] Connection refused`. A separate HTTPS connection check also could not connect to `eutils.ncbi.nlm.nih.gov:443`.
-- This is local connectivity evidence, not evidence of a cloud network problem or a working live search. The specific cause of the refused connection has not been established. Failure artifacts remain in the local ignored `runs/` directory.
-- No live PubMed success, licensed database search, or cloud acceptance test is claimed. Run the acceptance check below in the actual environment before relying on it for research.
+- The initial local PubMed probe failed with `URLError: [Errno 61] Connection refused`. After the user approved the NCBI domain on their network, a network-enabled rerun succeeded without any code change.
+- Successful live probe at 06:11:58 UTC: exact query `psychology[Title] AND 2020[Date - Publication]`, 560 matches, one requested record returned (PMID `32340885`), no query warnings. It was correctly labeled `partial` because this was a one-record connectivity test, not a complete search.
+- RIS and BibTeX exports were produced, and checksum verification passed for all eight saved artifacts. Run: `runs/20261113T061158Z-450d1465a23b`. Both successful and failed artifacts remain in the local ignored `runs/` directory.
+- This verifies the local PubMed workflow. A licensed database search and the cloud acceptance test remain unverified. Local network approval does not establish the cloud environment's network configuration; run the acceptance check below there too.
 
 ## Configure the existing environment
 
