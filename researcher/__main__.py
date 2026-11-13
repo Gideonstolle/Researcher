@@ -17,6 +17,7 @@ def parser():
     pubmed.add_argument("--query-file", type=Path, required=True)
     pubmed.add_argument("--max-records", type=int, default=100)
     pubmed.add_argument("--allow-partial", action="store_true", help="Explicitly permit a capped result subset")
+    pubmed.add_argument("--sort", choices=("pub_date", "relevance"), default="pub_date")
     pubmed.add_argument("--out", type=Path, default=Path("runs"))
     wos = sub.add_parser("webofscience", help="Search Web of Science Starter API using an authorized API key")
     wos.add_argument("--query-file", type=Path, required=True)
@@ -38,6 +39,33 @@ def parser():
     doctor.add_argument("--out", type=Path, default=Path("runs"))
     checked = sub.add_parser("verify", help="Check saved artifact checksums; not a cryptographic signature")
     checked.add_argument("run", type=Path)
+    search = sub.add_parser("search", help="Choose a public source: execute PubMed or prepare an assisted Scholar search")
+    search.add_argument("--engine", choices=("pubmed", "google-scholar"), default="pubmed")
+    search.add_argument("--query-file", type=Path, required=True)
+    search.add_argument("--max-records", type=int, help="PubMed cap (default 100); not a Scholar retrieval option")
+    search.add_argument("--allow-partial", action="store_true")
+    search.add_argument("--year-from", type=int)
+    search.add_argument("--year-to", type=int)
+    search.add_argument("--sort", choices=("pub_date", "relevance", "date"))
+    search.add_argument("--out", type=Path, default=Path("runs"))
+    scholar = sub.add_parser("scholar-plan", help="Prepare a Google Scholar link and observation form; does not execute a search")
+    scholar.add_argument("--query-file", type=Path, required=True)
+    scholar.add_argument("--year-from", type=int)
+    scholar.add_argument("--year-to", type=int)
+    scholar.add_argument("--sort", choices=("relevance", "date"), default="relevance")
+    scholar.add_argument("--out", type=Path, default=Path("runs"))
+    observed = sub.add_parser("scholar-record", help="Archive an actual assisted Google Scholar observation")
+    observed.add_argument("--query-file", type=Path, required=True)
+    observed.add_argument("--observation", type=Path, required=True)
+    observed.add_argument("--evidence", type=Path, nargs="*", default=[])
+    observed.add_argument("--out", type=Path, default=Path("runs"))
+    review = sub.add_parser("review", help="Combine verified search runs into an evidence and candidate-gap workspace")
+    review.add_argument("--runs", type=Path, nargs="+", required=True)
+    review.add_argument("--question", required=True)
+    review.add_argument("--out", type=Path, required=True, help="New review directory, e.g. private/reviews/play-v1")
+    for command in (pubmed, wos, imported, search, scholar, observed):
+        command.add_argument("--reason", help="Why this query or revision was run")
+        command.add_argument("--parent-run", help="Prior run ID when refining a query or following citations")
     return root
 
 
@@ -57,6 +85,29 @@ def main(argv=None):
     if sys.version_info < (3, 10):
         print("Python 3.10 or newer is required. Select a newer Python interpreter.", file=sys.stderr)
         return 2
+    if args.command == "review":
+        try:
+            from .review import create_review
+            report = create_review(args.runs, args.out, args.question)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print(safe_error(error), file=sys.stderr)
+            return 1
+        print(json.dumps(report, indent=2))
+        return 0
+    if args.command == "search":
+        if args.engine == "pubmed":
+            if args.year_from is not None or args.year_to is not None or args.sort == "date":
+                print("For PubMed put dates in the exact query; use --sort pub_date or relevance.", file=sys.stderr)
+                return 2
+            args.command = "pubmed"
+            args.sort = args.sort or "pub_date"
+            args.max_records = 100 if args.max_records is None else args.max_records
+        else:
+            if args.allow_partial or args.max_records is not None or args.sort == "pub_date":
+                print("Scholar prepares a link only; record the actual observed range later. Use --sort relevance or date.", file=sys.stderr)
+                return 2
+            args.command = "scholar-plan"
+            args.sort = args.sort or "relevance"
     if args.command == "verify":
         try:
             count = verify(args.run)
@@ -77,7 +128,8 @@ def main(argv=None):
         print(json.dumps(report, indent=2))
         if not args.online:
             return 0
-    database = args.database if args.command in {"import", "doctor"} else args.command
+    database = (args.database if args.command in {"import", "doctor"} else
+                "google-scholar" if args.command in {"scholar-plan", "scholar-record"} else args.command)
     run = Run(args.out, database)
     try:
         if args.command == "doctor":
@@ -94,8 +146,18 @@ def main(argv=None):
         if not query.strip():
             raise ValueError("Query file must contain the actual nonempty search string")
         run.metadata["query"] = query
+        run.metadata["search_reason"] = getattr(args, "reason", None)
+        run.metadata["parent_run_id"] = getattr(args, "parent_run", None)
         run.event({"event": "query_recorded", "query": query})
-        if args.command == "import":
+        if args.command == "scholar-plan":
+            from .scholar import prepare
+            records = prepare(run, query, year_from=args.year_from, year_to=args.year_to, sort=args.sort)
+            status = "planned"
+        elif args.command == "scholar-record":
+            from .scholar import record
+            records = record(run, query, args.observation.read_bytes(), evidence_files=args.evidence)
+            status = run.metadata["observation_status"]
+        elif args.command == "import":
             from .imports import import_export
             records = import_export(run, database, args.file.read_bytes(), args.metadata.read_bytes())
             status = "imported"
@@ -114,14 +176,16 @@ def main(argv=None):
             records = search(run, query,
                              max_records=1 if args.command == "doctor" else args.max_records,
                              allow_partial=True if args.command == "doctor" else args.allow_partial,
-                             email=os.environ.get("NCBI_EMAIL"), api_key=os.environ.get("NCBI_API_KEY"))
+                             email=os.environ.get("NCBI_EMAIL"), api_key=os.environ.get("NCBI_API_KEY"),
+                             sort="pub_date" if args.command == "doctor" else args.sort)
             status = "complete" if run.metadata.get("retrieval_complete") else "partial"
         run.write_bytes("records.json", json_bytes(records))
         from .citations import write_exports
         write_exports(records, run.directory)
         run.finish(status)
         print(json.dumps({"run_directory": str(run.directory), "status": status,
-                          "records": len(records)}, indent=2))
+                          "records": len(records),
+                          **({"search_url": run.metadata["search_url"]} if "search_url" in run.metadata else {})}, indent=2))
         return 0
     except (Exception, KeyboardInterrupt) as error:
         message = safe_error(error) or type(error).__name__
@@ -132,3 +196,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

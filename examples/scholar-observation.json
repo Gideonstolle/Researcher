@@ -1,0 +1,19 @@
+{
+  "query": "REPLACE WITH THE EXACT SUBMITTED QUERY, INCLUDING WHITESPACE",
+  "search_url": "REPLACE WITH THE ACTUAL GOOGLE SCHOLAR SEARCH URL",
+  "searched_at": null,
+  "status": null,
+  "filters": {
+    "year_from": null,
+    "year_to": null,
+    "sort": "relevance",
+    "other": null
+  },
+  "displayed_count": null,
+  "displayed_count_text": null,
+  "pages_checked": [],
+  "steps": [],
+  "results": [],
+  "stop_reason": null,
+  "notes": "UNFILLED TEMPLATE, NOT SEARCH EVIDENCE. Prefer scholar-plan to generate a query-specific template. Fill searched_at with the actual search/attempt ISO timestamp with timezone; set status to partial or blocked. Steps need at, action and details. Each selected result needs rank, page, title and paper URL. Never fabricate results or counts."
+}

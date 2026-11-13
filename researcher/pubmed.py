@@ -262,7 +262,7 @@ def _parse_records(data):
     return records
 
 
-def search(run, query, *, max_records=100, allow_partial=False, email=None, api_key=None):
+def search(run, query, *, max_records=100, allow_partial=False, email=None, api_key=None, sort="pub_date"):
     """Execute and archive an exact PubMed query, returning normalized citations.
 
     A capped search is an error unless allow_partial is explicit. All requested
@@ -273,12 +273,15 @@ def search(run, query, *, max_records=100, allow_partial=False, email=None, api_
         raise PubMedError("PubMed requires a nonempty text query.")
     if isinstance(max_records, bool) or not isinstance(max_records, int) or not 1 <= max_records <= 10000:
         raise PubMedError("max_records must be an integer from 1 to 10000 (the PubMed ESearch limit).")
+    if sort not in {"pub_date", "relevance"}:
+        raise PubMedError("PubMed sort must be pub_date or relevance.")
     client = _Client(run, email=email, api_key=api_key)
     run.metadata.update({"database": "pubmed", "query": query, "requested_cap": max_records,
                          "allow_partial": bool(allow_partial), "retrieval_complete": False,
-                         "returned_count": 0, "sort": "pub_date"})
+                         "returned_count": 0, "sort": sort, "access_mode": "api",
+                         "search_executed_by_program": True, "platform": "NCBI E-utilities"})
     raw = client.request("esearch", {"db": "pubmed", "term": query, "retmode": "json",
-                                      "retmax": max_records, "retstart": 0, "sort": "pub_date"})
+                                      "retmax": max_records, "retstart": 0, "sort": sort})
     client.archive("raw/esearch.json", raw)
     try:
         response = json.loads(raw)
@@ -318,3 +321,4 @@ def search(run, query, *, max_records=100, allow_partial=False, email=None, api_
         run.metadata["returned_count"] = len(records)
     run.metadata["retrieval_complete"] = len(records) == count
     return records
+

@@ -1,14 +1,16 @@
 # Researcher
 
-Academic researcher for Psychology. This is a small, executable literature-search workflow for Codex, with durable instructions in [AGENTS.md](AGENTS.md).
+Academic researcher for Psychology. Ask Codex to find papers, document its searches, and turn the evidence into candidate study questions. Start with the short **[prompt guide](docs/prompt-guide.md)**; no coding is required to use it through your Researcher environment. Durable agent instructions live in [AGENTS.md](AGENTS.md).
 
-It runs PubMed searches through NCBI E-utilities, offers an optional Web of Science Starter API connector, imports authorized PsycINFO and Web of Science RIS exports, and produces RIS/BibTeX citations plus an audit trail. No OpenAI API key, browser automation or extra Python packages are needed. PubMed works without an API key; the optional Web of Science connector requires its own authorized `WOS_API_KEY`.
+It executes PubMed searches through NCBI E-utilities, supports an auditable assisted Google Scholar workflow, offers an optional Web of Science Starter API connector, and imports authorized PsycINFO and Web of Science RIS exports. Search runs preserve citations and an audit trail. Review workspaces combine runs and prepare an evidence table and gap-analysis template for the agent to complete from material actually read.
 
-## What was missing
+No OpenAI API key or extra Python packages are needed. PubMed works without an API key; Web of Science requires an authorized `WOS_API_KEY`. Google Scholar requires actual permitted user/browser-assisted observations; preparing a link does not execute a Scholar search.
 
-The repository initially contained only the title and description above. There was no search command, query logger or agent instruction file. The reported symptom was selection of Consensus instead of the requested databases, not a failed program. Instructions given in a setup conversation had not been committed here. The executable commands and AGENTS.md now make the requested workflow available to tasks checking out this repository.
+## Choose an engine in your prompt
 
-The cloud setup chat itself has not been inspected from this local workspace. Its repository selection, publication status, network settings and instruction propagation remain to be verified. See [cloud setup and diagnosis](docs/cloud-setup.md).
+For example: "Search PubMed for empirical studies on pretend play and self-regulation in preschool children. Document the exact searches, build an evidence table, verify candidate gaps with follow-up searches, and suggest three feasible study questions. Label any capped search as exploratory."
+
+Specify `PubMed`, `Google Scholar`, `Web of Science`, or `PsycINFO` (and its platform). If omitted, PubMed is the stated default. The agent must report inaccessible sources instead of silently substituting another engine. See [prompt examples](docs/prompt-guide.md) and [cloud setup and diagnosis](docs/cloud-setup.md). Use a new task with the updated repository; this change does not automatically modify cloud settings or an existing task's checkout.
 
 ## Quick start
 
@@ -17,7 +19,7 @@ Use Python 3.10 or newer from the repository root:
 ```sh
 bash scripts/setup.sh
 python3 -m researcher doctor --online
-python3 -m researcher pubmed --query-file queries/pubmed-demo.txt --max-records 5 --allow-partial
+python3 -m researcher search --engine pubmed --query-file queries/pubmed-demo.txt --max-records 5 --allow-partial --sort relevance --reason "Connectivity demonstration"
 ```
 
 The last command is a **partial demonstration**, not a complete literature review. The sample topic is cognitive behavioral therapy and insomnia; replace it with your actual search strategy. Exact file contents, including the final newline, are submitted and logged without trimming. UTF-8 byte-order marks are rejected to avoid silently changing a query.
@@ -29,7 +31,9 @@ PYTHON_BIN=/opt/homebrew/bin/python3 bash scripts/setup.sh
 /opt/homebrew/bin/python3 -m researcher doctor --online
 ```
 
-For a complete retrieval, omit `--allow-partial` and set a cap sufficient for the query (maximum 10,000). If hits exceed the cap, the command records the count and fails before fetching citations. Narrow or deliberately partition broad queries; this version does not automate query partitioning or deduplication. PubMed ESearch cannot return beyond its first 10,000 matches. [NLM limit](https://www.nlm.nih.gov/pubs/techbull/so22/so22_updated_pubmed_e_utilities.html)
+For a complete retrieval, omit `--allow-partial` and set a cap sufficient for the query (maximum 10,000). If hits exceed the cap, the command records the count and fails before fetching citations. Narrow or deliberately partition broad queries; partitioning is not automatic. The `review` command can subsequently combine runs using strong identifiers. PubMed ESearch cannot return beyond its first 10,000 matches. [NLM limit](https://www.nlm.nih.gov/pubs/techbull/so22/so22_updated_pubmed_e_utilities.html)
+
+PubMed's default sort is `pub_date`; use `--sort relevance` for a sample ordered by NCBI's relevance ranking. Neither the newest nor the highest-ranked subset establishes a research gap. Add `--reason "..."` to explain a search, and `--parent-run RUN_ID` to link a revision to its predecessor. These options are also available on import and Scholar commands. Keep the broader strategy and all run links in `private/<project>/search-strategy.md`.
 
 Configure `NCBI_EMAIL` as your contact address in the environment settings when using E-utilities routinely. `NCBI_API_KEY` is optional; the workflow works without one and uses conservative request spacing, timeouts and finite retries. Credentials are excluded from request logs. Do not put keys in query files, Git, or prompts. [NCBI usage guidelines](https://eutilities.github.io/site/API_Key/usageandkey/)
 
@@ -42,18 +46,63 @@ The command prints its new directory under `runs/`:
 | `query.txt` | Original query file bytes |
 | `manifest.json` | Exact query, software/source hashes, start/end timestamps, database, counts, translation, warnings and status |
 | `events.jsonl` | Timestamped query/request/retry/completion events; credentials redacted |
-| `raw/` | PubMed responses or the original authorized RIS and search metadata |
+| `raw/` | API responses, the original authorized RIS, or supplied Scholar observations and evidence |
 | `records.json` | Normalized citation records |
 | `citations.ris`, `citations.bib` | Reference-manager exports |
 | `checksums.json` | SHA-256 inventory for detecting accidental changes |
 
-Failed runs keep their query, available responses, error and checksums. They do not claim to be zero-result successes. Complete, partial, failed and imported states are distinct.
+Failed runs keep their query, available responses, error and checksums. They do not claim to be zero-result successes. Complete, partial, failed and imported states are distinct; Scholar adds planned and blocked states. A plan has no retrieved citations.
 
 ```sh
 python3 -m researcher verify runs/PASTE-THE-PRINTED-RUN-DIRECTORY-NAME
 ```
 
 Snapshots let you inspect what happened even if database content later changes. Live reruns may produce different results. Checksums detect accidental changes; they are not signed proof against deliberate tampering. Run directories are never reused automatically, but remain ordinary editable files.
+
+## Google Scholar: prepare, observe, record
+
+Google Scholar's official help does not offer bulk access and asks automated software to respect its access rules. This project supplies no unattended Scholar scraper or CAPTCHA bypass. Use permitted user/browser-assisted searches, then record what was actually observed. [Scholar help](https://scholar.google.com/intl/en/scholar/help.html), [robots.txt](https://scholar.google.com/robots.txt).
+
+Save a Scholar-appropriate query in `private/scholar-query.txt`; do not reuse PubMed field tags. Prepare it with:
+
+```sh
+python3 -m researcher scholar-plan --query-file private/scholar-query.txt --year-from 2015 --sort relevance
+```
+
+The equivalent engine-selector command is `python3 -m researcher search --engine google-scholar --query-file private/scholar-query.txt --year-from 2015 --sort relevance`. A planned run saves `search-url.txt`, `observation-template.json` and `instructions.md`. It is explicitly unexecuted. An optional `--year-to` sets the upper publication-year bound; `--sort date` requests date order.
+
+Open the prepared link through permitted access. Copy its observation template into `private/`, fill it from the actual search, and preserve available screenshots, exports or other evidence. The observation records the exact query and actual URL, search timestamp with timezone, filters/sort, displayed count and original count text, inspected pages, timestamped steps, result ranks/metadata and stopping reason. Counts may be approximate or unknown. The template requires real observations; it is not demonstration data.
+
+```sh
+python3 -m researcher scholar-record --query-file private/scholar-query.txt --observation private/scholar-observation.json --evidence private/scholar-page.pdf
+```
+
+`--evidence` accepts saved evidence files. The recorded search is `partial`, or `blocked` if no results could be inspected. If blocked after retrieving some records, use `partial` and explain the interruption. The importer validates supplied observations and preserves their provenance, but does not independently prove a browser search occurred. Raw evidence strengthens the audit trail. It never claims exhaustive Scholar coverage. A general web search containing `site:scholar.google.com` remains a general web search, not a Scholar search.
+
+Only include ranked hits from the recorded query in its observation's results. Log Cited by, Related articles and reference-list discoveries separately with the actual discovery URL and parent paper. This adapter does not import citation-only Scholar URLs; a new keyword query belongs in a new run.
+
+## Build an evidence table and investigate gaps
+
+Use verified run folders to create a **new** review directory:
+
+```sh
+python3 -m researcher review --runs runs/FIRST-RUN runs/SECOND-RUN --question "How is pretend play associated with preschool self-regulation?" --out private/play-review-v1
+```
+
+| Review output | Purpose |
+| --- | --- |
+| `search-log.csv`, `search-log.md` | Queries, platforms, counts, dates, statuses and limits across runs |
+| `sources/` | Verified snapshots of the original runs, including exact query files |
+| `records.json`, `citations.ris`, `citations.bib` | Consolidated records and citations, with discovery occurrences in JSON |
+| `evidence.csv` | Citation rows with blank screening, evidence, findings and limitation fields |
+| `gap-analysis.md` | A structured template for candidate gaps, contrary evidence, verification and study questions |
+| `review.json` | Review question, counts and warnings |
+
+Only strong DOI/PMID matches are used for deduplication; similar titles alone are not merged. Identifier conflicts are retained for review and metadata conflicts are flagged. Every discovery occurrence remains traceable. Planned, blocked and failed runs contribute coverage information, never retrieved records.
+
+The CLI assembles the workspace; **Codex must read the available papers or abstracts to fill the evidence table and develop the analysis**. It records screening decisions and source locations, distinguishes abstract from full-text evidence, and executes targeted follow-up queries before proposing candidate gaps. It must state access and coverage limits, consider contrary findings, and avoid claiming that a small result set proves a topic is unstudied. New studies may resolve an apparent gap.
+
+Keep complete run and review folders in approved storage. Use `private/` for review output so unpublished research is not accidentally added to this public repository.
 
 ## Web of Science Starter API
 
@@ -80,7 +129,7 @@ Confirm that your intended processing and any AI use of the exported content are
 
 1. Save the **actual submitted search string/history** into a query file. The included PsycINFO template is specifically for EBSCOhost; Ovid, PsycNet and ProQuest require their own syntax. The Web of Science template is separate. Review all templates in the platform before use.
 2. Copy the appropriate metadata template from `examples/` into `private/`. Enter platform, the actual search timestamp with timezone, filters, displayed total, exported result range, collection/indexes and timespan. For example, a known timestamp has the form `2026-11-13T15:30:00+01:00`. Leave unknown fields `null`; do not guess.
-3. Save the authorized RIS export in `exports/`. For multiple batches, import each batch separately with its true range. This version does not merge or deduplicate batches.
+3. Save the authorized RIS export in `exports/`. For multiple batches, import each batch separately with its true range. Combine the resulting runs with `review` if needed; it retains provenance and uses only strong DOI/PMID matches for deduplication.
 4. Run the matching adapter:
 
 ```sh
@@ -100,4 +149,5 @@ python3 -m unittest discover -s tests -v
 
 Tests use synthetic fixtures and mocked network calls. `doctor --online` separately checks live PubMed access and writes a real, explicitly partial one-record run. Run it inside the selected cloud environment too; local success does not prove cloud networking works.
 
-This minimum workflow retrieves metadata. It does not perform automatic full-text retrieval, quality assessment, screening, synthesis, deduplication or a complete systematic review. Keep licensed exports and private research local to approved storage; this repository is public and intentionally ignores output folders.
+The executable tools retrieve metadata, preserve supplied observations and assemble review workspaces. They do not automatically retrieve full text, appraise quality or establish research gaps. Those tasks require evidence review by the agent/user, with unsupported fields left unknown. A completed metadata search is not a completed systematic review. Keep licensed exports and private research in approved storage; this repository is public and intentionally ignores output folders.
+
